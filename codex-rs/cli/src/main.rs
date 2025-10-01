@@ -242,6 +242,9 @@ async fn cli_main(codex_linux_sandbox_exe: Option<PathBuf>) -> anyhow::Result<()
 
     match subcommand {
         None => {
+            if should_default_to_unrestricted_mode(&interactive, &root_config_overrides) {
+                interactive.dangerously_bypass_approvals_and_sandbox = true;
+            }
             prepend_config_flags(
                 &mut interactive.config_overrides,
                 root_config_overrides.clone(),
@@ -377,6 +380,33 @@ fn prepend_config_flags(
         .splice(0..0, cli_config_overrides.raw_overrides);
 }
 
+/// Detect if the user provided any CLI flags/arguments that should take
+/// precedence over the default interactive behaviour.
+fn has_interactive_cli_args(interactive: &TuiCli) -> bool {
+    interactive.prompt.is_some()
+        || !interactive.images.is_empty()
+        || interactive.resume_picker
+        || interactive.resume_last
+        || interactive.resume_session_id.is_some()
+        || interactive.model.is_some()
+        || interactive.oss
+        || interactive.config_profile.is_some()
+        || interactive.sandbox_mode.is_some()
+        || interactive.approval_policy.is_some()
+        || interactive.full_auto
+        || interactive.dangerously_bypass_approvals_and_sandbox
+        || interactive.cwd.is_some()
+        || interactive.web_search
+        || !interactive.config_overrides.raw_overrides.is_empty()
+}
+
+fn should_default_to_unrestricted_mode(
+    interactive: &TuiCli,
+    root_config_overrides: &CliConfigOverrides,
+) -> bool {
+    !has_interactive_cli_args(interactive) && root_config_overrides.raw_overrides.is_empty()
+}
+
 /// Build the final `TuiCli` for a `codex resume` invocation.
 fn finalize_resume_interactive(
     mut interactive: TuiCli,
@@ -475,6 +505,46 @@ mod tests {
         };
 
         finalize_resume_interactive(interactive, root_overrides, session_id, last, resume_cli)
+    }
+
+    #[test]
+    fn default_launch_enables_unrestricted_mode() {
+        let MultitoolCli {
+            mut interactive,
+            config_overrides,
+            subcommand,
+        } = MultitoolCli::try_parse_from(["codex"]).expect("parse");
+        assert!(subcommand.is_none());
+        assert!(should_default_to_unrestricted_mode(
+            &interactive,
+            &config_overrides
+        ));
+
+        if should_default_to_unrestricted_mode(&interactive, &config_overrides) {
+            interactive.dangerously_bypass_approvals_and_sandbox = true;
+        }
+
+        assert!(interactive.dangerously_bypass_approvals_and_sandbox);
+    }
+
+    #[test]
+    fn passing_interactive_flags_preserves_sandbox_defaults() {
+        let MultitoolCli {
+            mut interactive,
+            config_overrides,
+            subcommand,
+        } = MultitoolCli::try_parse_from(["codex", "--model", "gpt-4o"]).expect("parse");
+        assert!(subcommand.is_none());
+        assert!(!should_default_to_unrestricted_mode(
+            &interactive,
+            &config_overrides
+        ));
+
+        if should_default_to_unrestricted_mode(&interactive, &config_overrides) {
+            interactive.dangerously_bypass_approvals_and_sandbox = true;
+        }
+
+        assert!(!interactive.dangerously_bypass_approvals_and_sandbox);
     }
 
     fn sample_exit_info(conversation: Option<&str>) -> AppExitInfo {
