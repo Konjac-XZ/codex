@@ -68,13 +68,10 @@ pub(crate) fn output_lines(
 
     let src = if *exit_code == 0 { stdout } else { stderr };
     let lines: Vec<&str> = src.lines().collect();
-    let total = lines.len();
-    let limit = TOOL_CALL_MAX_LINES;
 
-    let mut out = Vec::new();
+    let mut out = Vec::with_capacity(lines.len());
 
-    let head_end = total.min(limit);
-    for (i, raw) in lines[..head_end].iter().enumerate() {
+    for (i, raw) in lines.iter().enumerate() {
         let mut line = ansi_escape_line(raw);
         let prefix = if !include_prefix {
             ""
@@ -84,28 +81,6 @@ pub(crate) fn output_lines(
             "    "
         };
         line.spans.insert(0, prefix.into());
-        line.spans.iter_mut().for_each(|span| {
-            span.style = span.style.add_modifier(Modifier::DIM);
-        });
-        out.push(line);
-    }
-
-    let show_ellipsis = total > 2 * limit;
-    if show_ellipsis {
-        let omitted = total - 2 * limit;
-        out.push(format!("… +{omitted} lines").into());
-    }
-
-    let tail_start = if show_ellipsis {
-        total - limit
-    } else {
-        head_end
-    };
-    for raw in lines[tail_start..].iter() {
-        let mut line = ansi_escape_line(raw);
-        if include_prefix {
-            line.spans.insert(0, "    ".into());
-        }
         line.spans.iter_mut().for_each(|span| {
             span.style = span.style.add_modifier(Modifier::DIM);
         });
@@ -345,10 +320,6 @@ impl ExecCell {
 
         let mut lines: Vec<Line<'static>> = vec![header_line];
 
-        let continuation_lines = Self::limit_lines_from_start(
-            &continuation_lines,
-            layout.command_continuation_max_lines,
-        );
         if !continuation_lines.is_empty() {
             lines.extend(prefix_lines(
                 continuation_lines,
@@ -366,14 +337,12 @@ impl ExecCell {
                     include_prefix: false,
                 },
             );
-            let trimmed_output =
-                Self::truncate_lines_middle(&raw_output_lines, layout.output_max_lines);
 
             let mut wrapped_output: Vec<Line<'static>> = Vec::new();
             let output_wrap_width = layout.output_block.wrap_width(width);
             let output_opts =
                 RtOptions::new(output_wrap_width).word_splitter(WordSplitter::NoHyphenation);
-            for line in trimmed_output {
+            for line in raw_output_lines {
                 push_owned_lines(
                     &word_wrap_line(&line, output_opts.clone()),
                     &mut wrapped_output,
@@ -390,52 +359,6 @@ impl ExecCell {
         }
 
         lines
-    }
-
-    fn limit_lines_from_start(lines: &[Line<'static>], keep: usize) -> Vec<Line<'static>> {
-        if lines.len() <= keep {
-            return lines.to_vec();
-        }
-        if keep == 0 {
-            return vec![Self::ellipsis_line(lines.len())];
-        }
-
-        let mut out: Vec<Line<'static>> = lines[..keep].to_vec();
-        out.push(Self::ellipsis_line(lines.len() - keep));
-        out
-    }
-
-    fn truncate_lines_middle(lines: &[Line<'static>], max: usize) -> Vec<Line<'static>> {
-        if max == 0 {
-            return Vec::new();
-        }
-        if lines.len() <= max {
-            return lines.to_vec();
-        }
-        if max == 1 {
-            return vec![Self::ellipsis_line(lines.len())];
-        }
-
-        let head = (max - 1) / 2;
-        let tail = max - head - 1;
-        let mut out: Vec<Line<'static>> = Vec::new();
-
-        if head > 0 {
-            out.extend(lines[..head].iter().cloned());
-        }
-
-        let omitted = lines.len().saturating_sub(head + tail);
-        out.push(Self::ellipsis_line(omitted));
-
-        if tail > 0 {
-            out.extend(lines[lines.len() - tail..].iter().cloned());
-        }
-
-        out
-    }
-
-    fn ellipsis_line(omitted: usize) -> Line<'static> {
-        Line::from(vec![format!("… +{omitted} lines").dim()])
     }
 }
 
@@ -463,30 +386,19 @@ impl PrefixedBlock {
 #[derive(Clone, Copy)]
 struct ExecDisplayLayout {
     command_continuation: PrefixedBlock,
-    command_continuation_max_lines: usize,
     output_block: PrefixedBlock,
-    output_max_lines: usize,
 }
 
 impl ExecDisplayLayout {
-    const fn new(
-        command_continuation: PrefixedBlock,
-        command_continuation_max_lines: usize,
-        output_block: PrefixedBlock,
-        output_max_lines: usize,
-    ) -> Self {
+    const fn new(command_continuation: PrefixedBlock, output_block: PrefixedBlock) -> Self {
         Self {
             command_continuation,
-            command_continuation_max_lines,
             output_block,
-            output_max_lines,
         }
     }
 }
 
 const EXEC_DISPLAY_LAYOUT: ExecDisplayLayout = ExecDisplayLayout::new(
     PrefixedBlock::new("  │ ", "  │ "),
-    2,
     PrefixedBlock::new("  └ ", "    "),
-    5,
 );

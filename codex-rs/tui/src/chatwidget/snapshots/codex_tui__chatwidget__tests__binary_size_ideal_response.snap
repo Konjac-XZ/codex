@@ -1,6 +1,5 @@
 ---
 source: tui/src/chatwidget/tests.rs
-assertion_line: 1152
 expression: "lines[start_idx..].join(\"\\n\")"
 ---
 • I need to check the codex-rs repository to explain why the project's binaries
@@ -30,10 +29,254 @@ expression: "lines[start_idx..].join(\"\\n\")"
 • Ran for d in ansi-escape apply-patch arg0 cli common core exec execpolicy
   │ file-search linux-sandbox login mcp-client mcp-server mcp-types ollama
   │ tui; do echo "--- $d/Cargo.toml"; sed -n '1,200p' $d/Cargo.toml; echo;
-  │ … +1 lines
+  │ done
   └ --- ansi-escape/Cargo.toml
     [package]
-    … +7 lines
+    edition = "2024"
+    name = "codex-ansi-escape"
+    version = { workspace = true }
+
+    [lib]
+    name = "codex_ansi_escape"
+    path = "src/lib.rs"
+
+    [dependencies]
+    ansi-to-tui = "7.0.0"
+    ratatui = { version = "0.29.0", features = [
+        "unstable-rendered-line-info",
+        "unstable-widget-ref",
+    ] }
+    tracing = { version = "0.1.41", features = ["log"] }
+
+    --- apply-patch/Cargo.toml
+    [package]
+    edition = "2024"
+    name = "codex-apply-patch"
+    version = { workspace = true }
+
+    [lib]
+    name = "codex_apply_patch"
+    path = "src/lib.rs"
+
+    [lints]
+    workspace = true
+
+    [dependencies]
+    anyhow = "1"
+    similar = "2.7.0"
+    thiserror = "2.0.12"
+    tree-sitter = "0.25.8"
+    tree-sitter-bash = "0.25.0"
+
+    [dev-dependencies]
+    pretty_assertions = "1.4.1"
+    tempfile = "3.13.0"
+
+    --- arg0/Cargo.toml
+    [package]
+    edition = "2024"
+    name = "codex-arg0"
+    version = { workspace = true }
+
+    [lib]
+    name = "codex_arg0"
+    path = "src/lib.rs"
+
+    [lints]
+    workspace = true
+
+    [dependencies]
+    anyhow = "1"
+    codex-apply-patch = { path = "../apply-patch" }
+    codex-core = { path = "../core" }
+    codex-linux-sandbox = { path = "../linux-sandbox" }
+    dotenvy = "0.15.7"
+    tokio = { version = "1", features = ["rt-multi-thread"] }
+
+    --- cli/Cargo.toml
+    [package]
+    edition = "2024"
+    name = "codex-cli"
+    version = { workspace = true }
+
+    [[bin]]
+    name = "codex"
+    path = "src/main.rs"
+
+    [lib]
+    name = "codex_cli"
+    path = "src/lib.rs"
+
+    [lints]
+    workspace = true
+
+    [dependencies]
+    anyhow = "1"
+    clap = { version = "4", features = ["derive"] }
+    clap_complete = "4"
+    codex-arg0 = { path = "../arg0" }
+    codex-chatgpt = { path = "../chatgpt" }
+    codex-common = { path = "../common", features = ["cli"] }
+    codex-core = { path = "../core" }
+    codex-exec = { path = "../exec" }
+    codex-login = { path = "../login" }
+    codex-mcp-server = { path = "../mcp-server" }
+    codex-tui = { path = "../tui" }
+    serde_json = "1"
+    tokio = { version = "1", features = [
+        "io-std",
+        "macros",
+        "process",
+        "rt-multi-thread",
+        "signal",
+    ] }
+    tracing = "0.1.41"
+    tracing-subscriber = "0.3.19"
+
+    --- common/Cargo.toml
+    [package]
+    edition = "2024"
+    name = "codex-common"
+    version = { workspace = true }
+
+    [lints]
+    workspace = true
+
+    [dependencies]
+    clap = { version = "4", features = ["derive", "wrap_help"], optional =
+    true }
+    codex-core = { path = "../core" }
+    serde = { version = "1", optional = true }
+    toml = { version = "0.9", optional = true }
+
+    [features]
+    # Separate feature so that `clap` is not a mandatory dependency.
+    cli = ["clap", "serde", "toml"]
+    elapsed = []
+    sandbox_summary = []
+
+    --- core/Cargo.toml
+    [package]
+    edition = "2024"
+    name = "codex-core"
+    version = { workspace = true }
+
+    [lib]
+    name = "codex_core"
+    path = "src/lib.rs"
+
+    [lints]
+    workspace = true
+
+    [dependencies]
+    anyhow = "1"
+    async-channel = "2.3.1"
+    base64 = "0.22"
+    bytes = "1.10.1"
+    chrono = { version = "0.4", features = ["serde"] }
+    codex-apply-patch = { path = "../apply-patch" }
+    codex-login = { path = "../login" }
+    codex-mcp-client = { path = "../mcp-client" }
+    dirs = "6"
+    env-flags = "0.1.1"
+    eventsource-stream = "0.2.3"
+    fs2 = "0.4.3"
+    futures = "0.3"
+    libc = "0.2.174"
+    mcp-types = { path = "../mcp-types" }
+    mime_guess = "2.0"
+    rand = "0.9"
+    reqwest = { version = "0.12", features = ["json", "stream"] }
+    serde = { version = "1", features = ["derive"] }
+    serde_json = "1"
+    serde_bytes = "0.11"
+    sha1 = "0.10.6"
+    shlex = "1.3.0"
+    similar = "2.7.0"
+    strum_macros = "0.27.2"
+    tempfile = "3"
+    thiserror = "2.0.12"
+    time = { version = "0.3", features = ["formatting", "local-offset",
+    "macros"] }
+    tokio = { version = "1", features = [
+        "io-std",
+        "macros",
+        "process",
+        "rt-multi-thread",
+        "signal",
+    ] }
+    tokio-util = "0.7.14"
+    toml = "0.9.4"
+    toml_edit = "0.23.3"
+    tracing = { version = "0.1.41", features = ["log"] }
+    tree-sitter = "0.25.8"
+    tree-sitter-bash = "0.25.0"
+    uuid = { version = "1", features = ["serde", "v4"] }
+    whoami = "1.6.0"
+    wildmatch = "2.4.0"
+
+
+    [target.'cfg(target_os = "linux")'.dependencies]
+    landlock = "0.4.1"
+    seccompiler = "0.5.0"
+
+    # Build OpenSSL from source for musl builds.
+    [target.x86_64-unknown-linux-musl.dependencies]
+    openssl-sys = { version = "*", features = ["vendored"] }
+
+    # Build OpenSSL from source for musl builds.
+    [target.aarch64-unknown-linux-musl.dependencies]
+    openssl-sys = { version = "*", features = ["vendored"] }
+
+    [dev-dependencies]
+    assert_cmd = "2"
+    core_test_support = { path = "tests/common" }
+    maplit = "1.0.2"
+    predicates = "3"
+    pretty_assertions = "1.4.1"
+    tempfile = "3"
+    tokio-test = "0.4"
+    walkdir = "2.5.0"
+    wiremock = "0.6"
+
+    --- exec/Cargo.toml
+    [package]
+    edition = "2024"
+    name = "codex-exec"
+    version = { workspace = true }
+
+    [[bin]]
+    name = "codex-exec"
+    path = "src/main.rs"
+
+    [lib]
+    name = "codex_exec"
+    path = "src/lib.rs"
+
+    [lints]
+    workspace = true
+
+    [dependencies]
+    anyhow = "1"
+    chrono = "0.4.40"
+    clap = { version = "4", features = ["derive"] }
+    codex-arg0 = { path = "../arg0" }
+    codex-common = { path = "../common", features = [
+        "cli",
+        "elapsed",
+        "sandbox_summary",
+    ] }
+    codex-core = { path = "../core" }
+    codex-ollama = { path = "../ollama" }
+    owo-colors = "4.2.0"
+    serde_json = "1"
+    shlex = "1.3.0"
+    tokio = { version = "1", features = [
+        "io-std",
+        "macros",
+        "process",
+        "rt-multi-thread",
+        "signal",
     ] }
     tracing = { version
 
