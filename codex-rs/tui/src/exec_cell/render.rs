@@ -349,14 +349,14 @@ impl ExecCell {
                 );
             }
 
-            if !wrapped_output.is_empty() {
-                lines.extend(prefix_lines(
-                    wrapped_output,
-                    Span::from(layout.output_block.initial_prefix).dim(),
-                    Span::from(layout.output_block.subsequent_prefix),
-                ));
+                if !wrapped_output.is_empty() {
+                    lines.extend(prefix_lines(
+                        wrapped_output,
+                        Span::from(layout.output_block.initial_prefix).dim(),
+                        Span::from(layout.output_block.subsequent_prefix),
+                    ));
+                }
             }
-        }
 
         lines
     }
