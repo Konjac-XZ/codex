@@ -141,32 +141,31 @@ fn detect_default_user_shell() -> Shell {
     use libc::getuid;
     use std::ffi::CStr;
 
-    unsafe {
+    let home_path = unsafe {
         let uid = getuid();
         let pw = getpwuid(uid);
 
-        if !pw.is_null() {
-            let shell_path = CStr::from_ptr((*pw).pw_shell)
-                .to_string_lossy()
-                .into_owned();
-            let home_path = CStr::from_ptr((*pw).pw_dir).to_string_lossy().into_owned();
-
-            if shell_path.ends_with("/zsh") {
-                return Shell::Zsh(ZshShell {
-                    shell_path,
-                    zshrc_path: format!("{home_path}/.zshrc"),
-                });
-            }
-
-            if shell_path.ends_with("/bash") {
-                return Shell::Bash(BashShell {
-                    shell_path,
-                    bashrc_path: format!("{home_path}/.bashrc"),
-                });
-            }
+        if !pw.is_null() && !(*pw).pw_dir.is_null() {
+            Some(CStr::from_ptr((*pw).pw_dir).to_string_lossy().into_owned())
+        } else {
+            None
         }
     }
-    Shell::Unknown
+    .or_else(|| std::env::var("HOME").ok());
+
+    let shell_path = which::which("bash")
+        .ok()
+        .map(|path| path.to_string_lossy().to_string())
+        .unwrap_or_else(|| "/bin/bash".to_string());
+
+    let bashrc_path = home_path
+        .map(|home| format!("{home}/.bashrc"))
+        .unwrap_or_else(|| ".bashrc".to_string());
+
+    Shell::Bash(BashShell {
+        shell_path,
+        bashrc_path,
+    })
 }
 
 #[cfg(unix)]
@@ -223,27 +222,24 @@ pub async fn default_user_shell() -> Shell {
 #[cfg(unix)]
 mod tests {
     use super::*;
-    use std::process::Command;
     use std::string::ToString;
 
     #[tokio::test]
-    async fn test_current_shell_detects_zsh() {
-        let shell = Command::new("sh")
-            .arg("-c")
-            .arg("echo $SHELL")
-            .output()
-            .unwrap();
-
-        let home = std::env::var("HOME").unwrap();
-        let shell_path = String::from_utf8_lossy(&shell.stdout).trim().to_string();
-        if shell_path.ends_with("/zsh") {
-            assert_eq!(
-                default_user_shell().await,
-                Shell::Zsh(ZshShell {
-                    shell_path: shell_path.to_string(),
-                    zshrc_path: format!("{home}/.zshrc",),
-                })
-            );
+    async fn test_default_shell_is_bash() {
+        match default_user_shell().await {
+            Shell::Bash(bash) => {
+                assert!(
+                    bash.shell_path.ends_with("bash"),
+                    "expected bash shell path, got {}",
+                    bash.shell_path
+                );
+                assert!(
+                    bash.bashrc_path.ends_with(".bashrc"),
+                    "expected bashrc path, got {}",
+                    bash.bashrc_path
+                );
+            }
+            other => panic!("expected bash shell, got {other:?}"),
         }
     }
 
