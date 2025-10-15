@@ -48,10 +48,15 @@ pub(crate) fn new_active_exec_command(
     })
 }
 
+#[derive(Clone)]
+pub(crate) struct OutputLines {
+    pub(crate) lines: Vec<Line<'static>>,
+}
+
 pub(crate) fn output_lines(
     output: Option<&CommandOutput>,
     params: OutputLinesParams,
-) -> Vec<Line<'static>> {
+) -> OutputLines {
     let OutputLinesParams {
         only_err,
         include_angle_pipe,
@@ -63,15 +68,23 @@ pub(crate) fn output_lines(
         stderr,
         ..
     } = match output {
-        Some(output) if only_err && output.exit_code == 0 => return vec![],
+        Some(output) if only_err && output.exit_code == 0 => {
+            return OutputLines {
+                lines: Vec::new(),
+            };
+        }
         Some(output) => output,
-        None => return vec![],
+        None => {
+            return OutputLines {
+                lines: Vec::new(),
+            };
+        }
     };
 
     let src = if *exit_code == 0 { stdout } else { stderr };
     let lines: Vec<&str> = src.lines().collect();
 
-    let mut out = Vec::with_capacity(lines.len());
+    let mut out: Vec<Line<'static>> = Vec::new();
 
     for (i, raw) in lines.iter().enumerate() {
         let mut line = ansi_escape_line(raw);
@@ -89,7 +102,9 @@ pub(crate) fn output_lines(
         out.push(line);
     }
 
-    out
+    OutputLines {
+        lines: out,
+    }
 }
 
 pub(crate) fn spinner(start_time: Option<Instant>) -> Span<'static> {
@@ -342,7 +357,7 @@ impl ExecCell {
         }
 
         if let Some(output) = call.output.as_ref() {
-            let raw_output_lines = output_lines(
+            let raw_output = output_lines(
                 Some(output),
                 OutputLinesParams {
                     only_err: false,
@@ -355,9 +370,9 @@ impl ExecCell {
             let output_wrap_width = layout.output_block.wrap_width(width);
             let output_opts =
                 RtOptions::new(output_wrap_width).word_splitter(WordSplitter::NoHyphenation);
-            for line in raw_output_lines {
+            for line in &raw_output.lines {
                 push_owned_lines(
-                    &word_wrap_line(&line, output_opts.clone()),
+                    &word_wrap_line(line, output_opts.clone()),
                     &mut wrapped_output,
                 );
             }
