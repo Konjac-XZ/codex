@@ -69,42 +69,34 @@ pub(crate) fn output_lines(
         ..
     } = match output {
         Some(output) if only_err && output.exit_code == 0 => {
-            return OutputLines {
-                lines: Vec::new(),
-            };
+            return OutputLines { lines: Vec::new() };
         }
         Some(output) => output,
         None => {
-            return OutputLines {
-                lines: Vec::new(),
-            };
+            return OutputLines { lines: Vec::new() };
         }
     };
 
     let src = if *exit_code == 0 { stdout } else { stderr };
-    let lines: Vec<&str> = src.lines().collect();
-
     let mut out: Vec<Line<'static>> = Vec::new();
 
-    for (i, raw) in lines.iter().enumerate() {
+    for (i, raw) in src.lines().enumerate() {
         let mut line = ansi_escape_line(raw);
-        let prefix = if !include_prefix {
-            ""
-        } else if i == 0 && include_angle_pipe {
-            "  └ "
-        } else {
-            "    "
-        };
-        line.spans.insert(0, prefix.into());
+        if include_prefix {
+            let prefix = if i == 0 && include_angle_pipe {
+                "  └ "
+            } else {
+                "    "
+            };
+            line.spans.insert(0, prefix.into());
+        }
         line.spans.iter_mut().for_each(|span| {
             span.style = span.style.add_modifier(Modifier::DIM);
         });
         out.push(line);
     }
 
-    OutputLines {
-        lines: out,
-    }
+    OutputLines { lines: out }
 }
 
 pub(crate) fn spinner(start_time: Option<Instant>) -> Span<'static> {
@@ -366,23 +358,31 @@ impl ExecCell {
                 },
             );
 
-            let mut wrapped_output: Vec<Line<'static>> = Vec::new();
-            let output_wrap_width = layout.output_block.wrap_width(width);
-            let output_opts =
-                RtOptions::new(output_wrap_width).word_splitter(WordSplitter::NoHyphenation);
-            for line in &raw_output.lines {
-                push_owned_lines(
-                    &word_wrap_line(line, output_opts.clone()),
-                    &mut wrapped_output,
-                );
-            }
-
-            if !wrapped_output.is_empty() {
+            if raw_output.lines.is_empty() {
                 lines.extend(prefix_lines(
-                    wrapped_output,
+                    vec![Line::from("(no output)".dim())],
                     Span::from(layout.output_block.initial_prefix).dim(),
                     Span::from(layout.output_block.subsequent_prefix),
                 ));
+            } else {
+                let mut wrapped_output: Vec<Line<'static>> = Vec::new();
+                let output_wrap_width = layout.output_block.wrap_width(width);
+                let output_opts =
+                    RtOptions::new(output_wrap_width).word_splitter(WordSplitter::NoHyphenation);
+                for line in &raw_output.lines {
+                    push_owned_lines(
+                        &word_wrap_line(&line, output_opts.clone()),
+                        &mut wrapped_output,
+                    );
+                }
+
+                if !wrapped_output.is_empty() {
+                    lines.extend(prefix_lines(
+                        wrapped_output,
+                        Span::from(layout.output_block.initial_prefix).dim(),
+                        Span::from(layout.output_block.subsequent_prefix),
+                    ));
+                }
             }
         }
 
