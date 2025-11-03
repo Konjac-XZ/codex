@@ -26,8 +26,11 @@ use textwrap::WordSplitter;
 use unicode_width::UnicodeWidthStr;
 
 pub(crate) const TOOL_CALL_MAX_LINES: usize = 5;
+const USER_SHELL_TOOL_CALL_MAX_LINES: usize = 50;
 
 pub(crate) struct OutputLinesParams {
+    pub(crate) line_limit: usize,
+    pub(crate) only_err: bool,
     pub(crate) include_angle_pipe: bool,
     pub(crate) include_prefix: bool,
 }
@@ -36,12 +39,14 @@ pub(crate) fn new_active_exec_command(
     call_id: String,
     command: Vec<String>,
     parsed: Vec<ParsedCommand>,
+    is_user_shell_command: bool,
 ) -> ExecCell {
     ExecCell::new(ExecCall {
         call_id,
         command,
         parsed,
         output: None,
+        is_user_shell_command,
         start_time: Some(Instant::now()),
         duration: None,
     })
@@ -57,12 +62,17 @@ pub(crate) fn output_lines(
     params: OutputLinesParams,
 ) -> OutputLines {
     let OutputLinesParams {
+        line_limit: _,
+        only_err,
         include_angle_pipe,
         include_prefix,
     } = params;
     let CommandOutput {
         aggregated_output, ..
     } = match output {
+        Some(output) if only_err && output.exit_code == 0 => {
+            return OutputLines { lines: Vec::new() };
+        }
         Some(output) => output,
         None => {
             return OutputLines { lines: Vec::new() };
@@ -343,6 +353,8 @@ impl ExecCell {
             let raw_output = output_lines(
                 Some(output),
                 OutputLinesParams {
+                    line_limit: 0, // Unused - we never truncate
+                    only_err: false,
                     include_angle_pipe: false,
                     include_prefix: false,
                 },
