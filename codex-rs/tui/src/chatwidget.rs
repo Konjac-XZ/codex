@@ -132,7 +132,7 @@ struct RunningCommand {
 }
 
 const RATE_LIMIT_WARNING_THRESHOLDS: [f64; 3] = [75.0, 90.0, 95.0];
-const NUDGE_MODEL_SLUG: &str = "gpt-5-codex-mini";
+const NUDGE_MODEL_SLUG: &str = "gpt-5.1-codex-mini";
 const RATE_LIMIT_SWITCH_PROMPT_THRESHOLD: f64 = 90.0;
 
 #[derive(Default)]
@@ -522,6 +522,7 @@ impl ChatWidget {
                     .unwrap_or(false);
 
             if high_usage
+                && !self.rate_limit_switch_prompt_hidden()
                 && self.config.model != NUDGE_MODEL_SLUG
                 && !matches!(
                     self.rate_limit_switch_prompt,
@@ -1142,8 +1143,21 @@ impl ChatWidget {
                 kind: KeyEventKind::Press,
                 ..
             } if modifiers.contains(KeyModifiers::CONTROL) && c.eq_ignore_ascii_case(&'v') => {
-                if let Ok((path, info)) = paste_image_to_temp_png() {
-                    self.attach_image(path, info.width, info.height, info.encoded_format.label());
+                match paste_image_to_temp_png() {
+                    Ok((path, info)) => {
+                        self.attach_image(
+                            path,
+                            info.width,
+                            info.height,
+                            info.encoded_format.label(),
+                        );
+                    }
+                    Err(err) => {
+                        tracing::warn!("failed to paste image: {err}");
+                        self.add_to_history(history_cell::new_error_event(format!(
+                            "Failed to paste image: {err}",
+                        )));
+                    }
                 }
                 return;
             }
@@ -1695,6 +1709,7 @@ impl ChatWidget {
         };
         self.add_to_history(crate::status::new_status_output(
             &self.config,
+            self.auth_manager.as_ref(),
             total_usage,
             context_usage,
             &self.conversation_id,
@@ -1710,7 +1725,18 @@ impl ChatWidget {
             .find(|preset| preset.model == NUDGE_MODEL_SLUG)
     }
 
+    fn rate_limit_switch_prompt_hidden(&self) -> bool {
+        self.config
+            .notices
+            .hide_rate_limit_model_nudge
+            .unwrap_or(false)
+    }
+
     fn maybe_show_pending_rate_limit_prompt(&mut self) {
+        if self.rate_limit_switch_prompt_hidden() {
+            self.rate_limit_switch_prompt = RateLimitSwitchPromptState::Idle;
+            return;
+        }
         if !matches!(
             self.rate_limit_switch_prompt,
             RateLimitSwitchPromptState::Pending
@@ -1744,6 +1770,10 @@ impl ChatWidget {
         })];
 
         let keep_actions: Vec<SelectionAction> = Vec::new();
+        let never_actions: Vec<SelectionAction> = vec![Box::new(|tx| {
+            tx.send(AppEvent::UpdateRateLimitSwitchPromptHidden(true));
+            tx.send(AppEvent::PersistRateLimitSwitchPromptHidden);
+        })];
         let description = if preset.description.is_empty() {
             Some("Uses fewer credits for upcoming turns.".to_string())
         } else {
@@ -1766,6 +1796,17 @@ impl ChatWidget {
                 selected_description: None,
                 is_current: false,
                 actions: keep_actions,
+                dismiss_on_select: true,
+                ..Default::default()
+            },
+            SelectionItem {
+                name: "Keep current model (never show again)".to_string(),
+                description: Some(
+                    "Hide future rate limit reminders about switching models.".to_string(),
+                ),
+                selected_description: None,
+                is_current: false,
+                actions: never_actions,
                 dismiss_on_select: true,
                 ..Default::default()
             },
@@ -1795,11 +1836,12 @@ impl ChatWidget {
                 Some(preset.description.to_string())
             };
             let is_current = preset.model == current_model;
-            let preset_for_action = preset;
-            let single_supported_effort = preset_for_action.supported_reasoning_efforts.len() == 1;
+            let single_supported_effort = preset.supported_reasoning_efforts.len() == 1;
+            let preset_for_action = preset.clone();
             let actions: Vec<SelectionAction> = vec![Box::new(move |tx| {
+                let preset_for_event = preset_for_action.clone();
                 tx.send(AppEvent::OpenReasoningPopup {
-                    model: preset_for_action,
+                    model: preset_for_event,
                 });
             })];
             items.push(SelectionItem {
@@ -1814,7 +1856,10 @@ impl ChatWidget {
 
         self.bottom_pane.show_selection_view(SelectionViewParams {
             title: Some("Select Model and Effort".to_string()),
-            subtitle: Some("Switch the model for this and future Codex CLI sessions".to_string()),
+            subtitle: Some(
+                "Access legacy models by running codex -m <model_name> or in your config.toml"
+                    .to_string(),
+            ),
             footer_hint: Some("Press enter to select reasoning effort, or esc to dismiss.".into()),
             items,
             ..Default::default()
@@ -1893,7 +1938,7 @@ impl ChatWidget {
 
             let warning = "⚠ High reasoning effort can quickly consume Plus plan rate limits.";
             let show_warning =
-                preset.model.starts_with("gpt-5-codex") && effort == ReasoningEffortConfig::High;
+                preset.model.starts_with("gpt-5.1-codex") && effort == ReasoningEffortConfig::High;
             let selected_description = show_warning.then(|| {
                 description
                     .as_ref()
@@ -2384,6 +2429,13 @@ impl ChatWidget {
 
     pub(crate) fn set_world_writable_warning_acknowledged(&mut self, acknowledged: bool) {
         self.config.notices.hide_world_writable_warning = Some(acknowledged);
+    }
+
+    pub(crate) fn set_rate_limit_switch_prompt_hidden(&mut self, hidden: bool) {
+        self.config.notices.hide_rate_limit_model_nudge = Some(hidden);
+        if hidden {
+            self.rate_limit_switch_prompt = RateLimitSwitchPromptState::Idle;
+        }
     }
 
     #[cfg_attr(not(target_os = "windows"), allow(dead_code))]

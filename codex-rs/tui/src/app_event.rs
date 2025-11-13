@@ -104,12 +104,23 @@ pub(crate) enum AppEvent {
     #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
     UpdateWorldWritableWarningAcknowledged(bool),
 
+    /// Update whether the rate limit switch prompt has been acknowledged for the session.
+    UpdateRateLimitSwitchPromptHidden(bool),
+
     /// Persist the acknowledgement flag for the full access warning prompt.
     PersistFullAccessWarningAcknowledged,
 
     /// Persist the acknowledgement flag for the world-writable directories warning.
     #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
     PersistWorldWritableWarningAcknowledged,
+
+    /// Persist the acknowledgement flag for the rate limit switch prompt.
+    PersistRateLimitSwitchPromptHidden,
+
+    /// Persist the acknowledgement flag for the model migration prompt.
+    PersistModelMigrationPromptAcknowledged {
+        migration_config: String,
+    },
 
     /// Skip the next world-writable scan (one-shot) after a user-confirmed continue.
     #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
