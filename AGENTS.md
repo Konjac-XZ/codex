@@ -1,3 +1,13 @@
+# OF EXTREME IMPORTANCE, SUPERSEDING ALL SUBSEQUENT RULES
+
+We are maintaining a privately utilized CodeX branch customized to accommodate the user's personal preferences. No consideration for compatibility issues is required for any modifications.
+
+The primary features maintained by this branch are:
+
+1. Regardless of the shell utilized by the user, all operations shall be executed using Bash, and the upstream LLM must be prevented from detecting the presence of any other shell.
+2. At all times, and regardless of the task executed, the system must eternally, absolutely, and completely refuse to collapse (fold) any input or output.
+
+
 # Rust/codex-rs
 
 In the codex-rs folder where the rust code lives:
@@ -85,6 +95,7 @@ If you don’t have the tool:
 - `ResponsesRequest` exposes helpers (`body_json`, `input`, `function_call_output`, `custom_tool_call_output`, `call_output`, `header`, `path`, `query_param`) so assertions can target structured payloads instead of manual JSON digging.
 - Build SSE payloads with the provided `ev_*` constructors and the `sse(...)`.
 - Prefer `wait_for_event` over `wait_for_event_with_timeout`.
+- Prefer `mount_sse_once` over `mount_sse_once_match` or `mount_sse_sequence`
 
 - Typical pattern:
 
