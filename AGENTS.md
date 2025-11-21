@@ -7,6 +7,7 @@ The primary features maintained by this branch are:
 1. Regardless of the shell utilized by the user, all operations shall be executed using Bash, and the upstream LLM must be prevented from detecting the presence of any other shell.
 2. At all times, and regardless of the task executed, the system must eternally, absolutely, and completely refuse to collapse (fold) any input or output.
 
+Similarly, unit tests must not be executed due to the existence of modifications. We have no interest in updating our unit tests to follow the upstream changes.
 
 # Rust/codex-rs
 
